@@ -1,4 +1,4 @@
-----DISCLAIMER: This game was made with the help of GPT 5.----
+----DISCLAIMER: This game was made with the help of GPT 5.0----
 
 Blast Cubes
 
@@ -37,3 +37,4 @@ Installation
 1. Clone the repository:
    ```bash
    git clone https://github.com/apple2pro/Cube-game.git
+
