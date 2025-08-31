@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Blast Cubes</title>
+<style>
+body { margin:0; overflow:hidden; background:black; font-family: Arial, sans-serif; color:white; }
+canvas { display:block; }
+#menu, #gameOverScreen {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+  z-index:10;
+}
+#menuCanvas { position:absolute; top:0; left:0; z-index:0; }
+#menu h1, .menu-btn, #settings { position:relative; z-index:1; }
+#menu h1 { font-size:60px; color:#0ff; text-shadow:0 0 10px #0ff; margin-bottom:40px; }
+.menu-btn { background:#222; border:2px solid #0ff; color:#0ff; padding:15px 30px; font-size:20px; margin:10px; cursor:pointer; border-radius:10px; transition:0.2s; }
+.menu-btn:hover { background:#0ff; color:#000; }
+#settings { display:none; flex-direction:column; align-items:center; margin-top:20px; }
+#gameOverScreen { display:none; flex-direction:column; background: rgba(0,0,0,0.9); }
+#gameOverScreen h1 { font-size:60px; color:red; text-shadow:0 0 15px darkred; margin-bottom:30px; }
+#gameOverScreen button { background:#222; border:2px solid #f00; color:#f00; padding:15px 30px; font-size:20px; cursor:pointer; border-radius:10px; transition:0.2s; }
+#gameOverScreen button:hover { background:#f00; color:#000; }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <canvas id="menuCanvas"></canvas>
+  <h1>Blast Cubes</h1>
+  <button class="menu-btn" onclick="startGame()">Play</button>
+  <button class="menu-btn" onclick="toggleSettings()">Settings</button>
+  <div id="settings">
+    <label style="margin:5px">Graphics:
+      <select id="graphicsSelect">
+        <option value="high">High</option>
+        <option value="medium" selected>Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </label>
+    <label style="margin:5px">
+      Show FPS: <input type="checkbox" id="showFps" checked>
+    </label>
+  </div>
+</div>
+
+<div id="gameOverScreen">
+  <h1>GAME OVER</h1>
+  <button onclick="restartGame()">Restart</button>
+  <button onclick="backToMenu()">Main Menu</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas=document.getElementById("gameCanvas");
+const ctx=canvas.getContext("2d");
+const menuCanvas=document.getElementById("menuCanvas");
+const menuCtx=menuCanvas.getContext("2d");
+
+let player,enemies,beams,enemyBeams;
+let keys={}, mouse={x:0,y:0};
+let gameRunning=false, score=0, lastTime=0, fps=0, fpsCounterTime=0;
+let graphicsQuality="medium";
+
+let scaleX=1, scaleY=1;
+function resizeCanvas(){
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight;
+  menuCanvas.width=window.innerWidth;
+  menuCanvas.height=window.innerHeight;
+  scaleX=canvas.width/800;
+  scaleY=canvas.height/600;
+}
+window.addEventListener("resize",resizeCanvas);
+resizeCanvas();
+
+let gridOffset=0;
+function drawMenuGrid(){
+  menuCtx.clearRect(0,0,menuCanvas.width,menuCanvas.height);
+  menuCtx.strokeStyle="gray";
+  menuCtx.lineWidth=1;
+  const spacing=40;
+  gridOffset+=0.5;
+  if(gridOffset>spacing) gridOffset=0;
+  for(let x=0;x<menuCanvas.width;x+=spacing){
+    menuCtx.beginPath(); menuCtx.moveTo(x+gridOffset,0); menuCtx.lineTo(x+gridOffset,menuCanvas.height); menuCtx.stroke();
+  }
+  for(let y=0;y<menuCanvas.height;y+=spacing){
+    menuCtx.beginPath(); menuCtx.moveTo(0,y+gridOffset); menuCtx.lineTo(menuCanvas.width,y+gridOffset); menuCtx.stroke();
+  }
+  if(!gameRunning) requestAnimationFrame(drawMenuGrid);
+}
+drawMenuGrid();
+
+window.addEventListener("keydown",e=>keys[e.key]=true);
+window.addEventListener("keyup",e=>keys[e.key]=false);
+canvas.addEventListener("mousemove",e=>{
+  const rect=canvas.getBoundingClientRect();
+  mouse.x=(e.clientX-rect.left)/scaleX;
+  mouse.y=(e.clientY-rect.top)/scaleY;
+});
+canvas.addEventListener("click",()=>{
+  if(!gameRunning) return;
+  const angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);
+  beams.push({x:player.x,y:player.y,dx:Math.cos(angle)*6,dy:Math.sin(angle)*6,size:5});
+});
+
+function toggleSettings(){
+  const s=document.getElementById("settings");
+  s.style.display=s.style.display==="flex"?"none":"flex";
+}
+function startGame(){
+  document.getElementById("menu").style.display="none";
+  graphicsQuality=document.getElementById("graphicsSelect").value;
+  resetGame();
+  gameRunning=true;
+  lastTime=performance.now();
+  fpsCounterTime=performance.now();
+  requestAnimationFrame(gameLoop);
+}
+function restartGame(){ document.getElementById("gameOverScreen").style.display="none"; startGame(); }
+function backToMenu(){
+  gameRunning=false;
+  destroyGame();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById("gameOverScreen").style.display="none";
+  document.getElementById("menu").style.display="flex";
+  drawMenuGrid();
+}
+
+function resetGame(){
+  player={x:400,y:300,size:20,speed:3,health:50,maxHealth:50,angle:0};
+  enemies=[]; beams=[]; enemyBeams=[];
+  score=0;
+}
+function destroyGame(){ player=null; enemies=[]; beams=[]; enemyBeams=[]; keys={}; score=0; lastTime=0; fps=0; }
+
+function gameLoop(timestamp){
+  if(!gameRunning) return;
+  const dt=(timestamp-lastTime)/16;
+  lastTime=timestamp;
+  if(timestamp-fpsCounterTime>=500){
+    fps=Math.round(1000/(timestamp-lastTime));
+    fpsCounterTime=timestamp;
+  }
+  updateGame();
+  drawGame();
+  requestAnimationFrame(gameLoop);
+}
+
+function updateGame(){
+  if(!player) return;
+  let dx=(keys["d"]?1:0)-(keys["a"]?1:0);
+  let dy=(keys["s"]?1:0)-(keys["w"]?1:0);
+  const len=Math.hypot(dx,dy); if(len>0){dx/=len; dy/=len;}
+  player.x+=dx*player.speed;
+  player.y+=dy*player.speed;
+  if(dx!==0||dy!==0) player.angle=Math.atan2(dy,dx);
+  player.health=Math.min(player.maxHealth,player.health+0.02);
+  if(Math.random()<0.02) enemies.push({x:Math.random()*800,y:Math.random()*600,size:20,dx:0,dy:0,health:1,angle:0});
+  beams.forEach((b,i)=>{
+    b.x+=b.dx; b.y+=b.dy;
+    enemies.forEach((e,ei)=>{
+      if(Math.abs(b.x-e.x)<e.size && Math.abs(b.y-e.y)<e.size){
+        enemies.splice(ei,1); beams.splice(i,1); score++;
+      }
+    });
+  });
+  enemies.forEach(e=>{
+    const angle=Math.atan2(player.y-e.y,player.x-e.x);
+    e.angle=angle;
+    e.dx=Math.cos(angle); e.dy=Math.sin(angle);
+    e.x+=e.dx; e.y+=e.dy;
+    if(Math.random()<0.01){
+      enemyBeams.push({x:e.x,y:e.y,dx:(player.x-e.x)/30,dy:(player.y-e.y)/30,size:5});
+    }
+  });
+  enemyBeams.forEach((b,i)=>{
+    b.x+=b.dx*10; b.y+=b.dy*10;
+    if(Math.abs(b.x-player.x)<player.size && Math.abs(b.y-player.y)<player.size){
+      player.health-=2; enemyBeams.splice(i,1);
+    }
+  });
+  if(player.health<=0){ gameRunning=false; document.getElementById("gameOverScreen").style.display="flex"; }
+}
+
+function drawGame(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle="gray"; ctx.lineWidth=1;
+  const spacing=graphicsQuality==="low"?80:40;
+  gridOffset+=graphicsQuality==="high"?1:0.5;
+  if(gridOffset>spacing) gridOffset=0;
+  for(let x=0;x<canvas.width;x+=spacing){
+    ctx.beginPath(); ctx.moveTo(x+gridOffset,0); ctx.lineTo(x+gridOffset,canvas.height); ctx.stroke();
+  }
+  for(let y=0;y<canvas.height;y+=spacing){
+    ctx.beginPath(); ctx.moveTo(0,y+gridOffset); ctx.lineTo(canvas.width,y+gridOffset); ctx.stroke();
+  }
+  if(graphicsQuality==="high"){
+    ctx.save(); ctx.translate(player.x*scaleX,player.y*scaleY); ctx.rotate(player.angle||0);
+    ctx.fillStyle="cyan"; ctx.shadowColor="cyan"; ctx.shadowBlur=12;
+    ctx.fillRect(-player.size/2*scaleX,-player.size/2*scaleY,player.size*scaleX,player.size*scaleY);
+    ctx.restore();
+  } else if(graphicsQuality==="low"){
+    ctx.fillStyle="cyan"; ctx.fillRect(player.x*scaleX-8,player.y*scaleY-8,16,16);
+  } else {
+    ctx.fillStyle="cyan"; ctx.fillRect(player.x*scaleX-player.size/2*scaleX,player.y*scaleY-player.size/2*scaleY,player.size*scaleX,player.size*scaleY);
+  }
+  ctx.fillStyle=graphicsQuality==="high"?"lime":"yellow";
+  beams.forEach(b=>ctx.fillRect(b.x*scaleX,b.y*scaleY,b.size*scaleX,b.size*scaleY));
+  ctx.fillStyle="red";
+  enemies.forEach(e=>{
+    ctx.save(); ctx.translate(e.x*scaleX,e.y*scaleY); ctx.rotate(e.angle||0);
+    ctx.fillRect(-e.size/2*scaleX,-e.size/2*scaleY,e.size*scaleX,e.size*scaleY);
+    ctx.restore();
+  });
+  ctx.fillStyle=graphicsQuality==="high"?"orange":"darkorange";
+  enemyBeams.forEach(b=>ctx.fillRect(b.x*scaleX,b.y*scaleY,b.size*scaleX,b.size*scaleY));
+  ctx.strokeStyle="white"; ctx.beginPath();
+  ctx.moveTo(player.x*scaleX,player.y*scaleY);
+  ctx.lineTo(mouse.x*scaleX,mouse.y*scaleY); ctx.stroke();
+  if(document.getElementById("showFps").checked){
+    ctx.fillStyle="white"; ctx.font=`20px Arial`;
+    ctx.fillText(`FPS: ${Math.round(1000/(performance.now()-lastTime))}`, 10, 30);
+    ctx.fillText(`Score: ${score}`, 10, 60);
+  } else {
+    ctx.fillStyle="white"; ctx.font=`20px Arial`;
+    ctx.fillText(`Score: ${score}`, 10, 30);
+  }
+}
+</script>
+</body>
+</html>
